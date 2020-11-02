@@ -1209,7 +1209,6 @@ namespace TinyNavigation.Ioc
             Instance.RegisterInstance(currentContainer, this);
             Instance.RegisterFactory(typeof(IContainerExtension), c => c.Resolve<UnityContainerExtension>(currentContainer));
             Instance.RegisterFactory(typeof(IContainerProvider), c => c.Resolve<UnityContainerExtension>(currentContainer));
-            ExceptionExtensions.RegisterFrameworkExceptionType(typeof(ResolutionFailedException));
         }
 
         /// <summary>
@@ -1452,7 +1451,7 @@ namespace TinyNavigation.Ioc
                 var c = _currentScope?.Container ?? Instance;
                 var overrides = parameters.Select(p => new DependencyOverride(p.Type, p.Instance)).ToArray();
 
-                if (typeof(IEnumerable).IsAssignableFrom(type) && type.GetGenericArguments().Length > 0)
+                if (typeof(System.Collections.IEnumerable).IsAssignableFrom(type) && type.GetGenericArguments().Length > 0)
                 {
                     type = type.GetGenericArguments()[0];
                     return c.ResolveAll(type, overrides);
@@ -1462,7 +1461,7 @@ namespace TinyNavigation.Ioc
             }
             catch (Exception ex)
             {
-                throw new ContainerResolutionException(type, ex);
+                throw new InvalidOperationException(type.FullName, ex);
             }
         }
 
@@ -1488,7 +1487,7 @@ namespace TinyNavigation.Ioc
             }
             catch (Exception ex)
             {
-                throw new ContainerResolutionException(type, name, ex);
+                throw new InvalidOperationException(name, ex);
             }
         }
 
@@ -1585,7 +1584,7 @@ namespace TinyNavigation.Ioc
                 }
                 catch (Exception ex)
                 {
-                    throw new ContainerResolutionException(type, ex);
+                    throw new InvalidOperationException(type.FullName, ex);
                 }
             }
 
@@ -1602,7 +1601,7 @@ namespace TinyNavigation.Ioc
                 }
                 catch (Exception ex)
                 {
-                    throw new ContainerResolutionException(type, name, ex);
+                    throw new InvalidOperationException(name, ex);
                 }
             }
         }
@@ -2923,10 +2922,27 @@ namespace TinyNavigation
         }
 
         /// <summary>
-        /// Creates the container used by Prism.
+        /// Creates the <see cref="IContainerExtension"/>
         /// </summary>
-        /// <returns>The container</returns>
-        protected abstract IContainerExtension CreateContainerExtension();
+        /// <returns></returns>
+        protected virtual IContainerExtension CreateContainerExtension()
+        {
+#if USE_UNITY_CONTAINER && !USE_DRYIOC_CONTAINER
+            return new UnityContainerExtension(new UnityContainer());
+#elif USE_DRYIOC_CONTAINER
+            return new DryIocContainerExtension(new DryIoc.Container(CreateContainerRules()));
+#else
+            return new TinyIocContainerExtension(new TinyIoCContainer());
+#endif
+        }
+
+#if USE_DRYIOC_CONTAINER
+        /// <summary>
+        /// Create <see cref="Rules" /> to alter behavior of <see cref="IContainer" />
+        /// </summary>
+        /// <returns>An instance of <see cref="Rules" /></returns>
+        protected virtual Rules CreateContainerRules() => DryIocContainerExtension.DefaultRules;
+#endif
 
         /// <summary>
         /// Registers all types that are required by Prism to function with the container.
@@ -3242,7 +3258,7 @@ namespace TinyNavigation
         {
         }
 
-        #region INavigationParametersInternal
+#region INavigationParametersInternal
         void INavigationParametersInternal.Add(string key, object value)
         {
             _internalParameters.Add(key, value);
@@ -3257,7 +3273,7 @@ namespace TinyNavigation
         {
             return _internalParameters.GetValue<T>(key);
         }
-        #endregion
+#endregion
     }
 
     public class DialogParameters : ParametersBase, IDialogParameters
